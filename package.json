@@ -1,5 +1,5 @@
 {
-  "name": "fc",
+  "name": "weapp_fc",
   "version": "1.0.0",
   "description": "小程序静态检查",
   "bin": "./index",
