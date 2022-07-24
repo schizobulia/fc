@@ -162,9 +162,13 @@ async function saveFile (file, content) {
 function checkStaticIs (content) {
   GLOBAL_FILE.staticFile.forEach((ele, key) => {
     if(content.includes(key)) {
-      let distPath = getDistPath(ele)
-      fs.ensureFileSync(distPath)
-      fs.createReadStream(ele).pipe(fs.createWriteStream(distPath))
+      if ((fs.statSync(ele).size / 1024).toFixed(0) > 200) {
+        warringLog(`${path.relative(config.dir, ele)} 文件大于200k`, 'error')
+      } else {
+        let distPath = getDistPath(ele)
+        fs.ensureFileSync(distPath)
+        fs.createReadStream(ele).pipe(fs.createWriteStream(distPath))
+      }
       GLOBAL_FILE.staticFile.delete(key)
     }
   })

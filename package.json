@@ -1,13 +1,15 @@
 {
   "name": "weapp_fc",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "小程序静态检查",
   "bin": "./index",
   "scripts": {
     "dev": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["weapp"],
+  "keywords": [
+    "weapp"
+  ],
   "author": "schizobulia",
   "license": "MIT",
   "dependencies": {
