@@ -1,0 +1,14 @@
+log
+yarn-error.log
+yarn.lock
+out
+wechat
+.DS_Store
+npm-debug.log
+node_modules
+.idea/
+.vscode
+dist
+config.json
+package-lock.json
+test.js

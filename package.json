@@ -1,0 +1,29 @@
+{
+  "name": "fc",
+  "version": "1.0.0",
+  "description": "小程序静态检查",
+  "bin": "./index",
+  "scripts": {
+    "dev": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["weapp"],
+  "author": "schizobulia",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/core": "^7.0.0",
+    "@babel/traverse": "^7.0.0",
+    "antlrv4-js-css": "^1.0.0",
+    "antlrv4-js-html": "^1.0.0",
+    "fs-extra": "^10.1.0",
+    "commander": "^9.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/schizobulia/fc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/schizobulia/fc/issues"
+  },
+  "homepage": "https://github.com/schizobulia/fc.git"
+}
