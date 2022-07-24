@@ -4,6 +4,8 @@
 -----
 ### 执行
 ```javascript
+$ npm i weapp_fc -g
+
 $ 创建一个空目录
 
 $ weapp_fc - d 小程序目录
