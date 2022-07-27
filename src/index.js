@@ -10,45 +10,48 @@ const { program } = require('commander')
 
 let config = {}
 const GLOBAL_FILE = {
-  staticFile: new Map(),
-  caches: new Set()
+  staticFile: new Map(), // 静态资源文件
+  caches: new Set(),     // 文件缓存
+  globalUsingComponents: {}    // app.json中定义的组件
 }
 
 async function builder (dir) {
   GLOBAL_FILE.staticFile = getStaticFiles(dir)
   const appJson = path.join(dir, 'app.json')
-  compileFile(path.join(dir, 'sitemap.json'))
-  compileFile(appJson)
-  compileFile(changeFileExt(appJson, '.js'))
-  compileFile(changeFileExt(appJson, '.wxss'))
+  compileFile(path.join(dir, 'sitemap.json'), 'root')
+  compileFile(appJson, 'root')
+  compileFile(changeFileExt(appJson, '.js'), 'root')
+  compileFile(changeFileExt(appJson, '.wxss'), 'root')
+  checkUsingComponents(GLOBAL_FILE.globalUsingComponents, appJson)
   copyStaticFiles()
 }
 
-async function compileFile(file) {
+async function compileFile(file, type) {
   if (GLOBAL_FILE.caches.has(file)) {
     return
   }
   GLOBAL_FILE.caches.add(file)
   const ext = path.extname(file)
   if (ext === '.wxss') {
-    await cssCompile(file)
+    await cssCompile(file, type)
   } else if (ext === '.js') {
     await jsCompile(file)
   } else if (ext === '.json') {
     await jsonCompile(file)
   } else if (ext === '.wxml') {
-    await wxmlCompile(file)
+    await wxmlCompile(file, type)
   }
 }
 
-function wxmlCompile (file) {
+function wxmlCompile (file, type) {
   const content = fs.readFileSync(file, 'utf8').toString()
-  const v = new WxmlVisitor(file)
+  const v = new WxmlVisitor(file, type)
   try {
     antlrv4_js_html.transform(content, v)
   } catch (error) {
     warringLog(`${path.relative(config.dir, file)} 编译失败`, 'warring')
   }
+  checkUsingComponents(v.usingComponents, file)
   saveFile(file, null)
 }
 
@@ -58,24 +61,29 @@ async function jsonCompile (file) {
     warringLog(`${path.relative(config.dir, file)} 不存在`, 'error')
     return
   }
-  const res = JSON.parse(fs.readFileSync(file, 'utf8'))
+  const res = fs.readJSONSync(file)
+  if (path.relative(config.dir, file) === 'app.json') {
+    lazyCodeLoading(res['lazyCodeLoading'] || null)
+    GLOBAL_FILE.globalUsingComponents = res.usingComponents || {}
+  }
   saveFile(file, null)
   const pages = res.pages || []
   const usingComponents = res.usingComponents || {}
-  const subpackages = res['subpackages'] || res['Subpackages'] || []
+  const subpackages = res['subpackages'] || res['Subpackages'] || res['subPackages'] || []
   while (pages.length) {
     const item = pages.pop()
     const p = getWxFile(item, '.js')
-    saveJsonFile(p, file, item)
+    saveJsonFile(p, file, item, 'root')
   }
   for (const key in usingComponents) {
     const item = usingComponents[key]
     const p = getWxFile(path.resolve(path.dirname(file), item) + '.js', false)
-    saveJsonFile(p, file, item)
+    saveJsonFile(p, file, item, 'root')
   }
   buildSubpackages(subpackages, file)
 }
 
+// 分包页的处理
 function buildSubpackages (subpackages, file) {
   while (subpackages.length) {
     const ele = subpackages.pop()
@@ -85,20 +93,20 @@ function buildSubpackages (subpackages, file) {
       const page = pages.pop()
       const item = path.join(root, page)
       const p = getWxFile(item, '.js')
-      saveJsonFile(p, file, item)
+      saveJsonFile(p, file, item, 'subpackages')
     }
   }
 }
 
 // 保存json文件
-function saveJsonFile (p, file, item) {
+function saveJsonFile (p, file, item, type) {
   if (!p) { 
     warringLog(`请优化该路径来节约编译时间: ${item}, 来源: ${path.relative(config.dir, file)}`, 'error') 
   } else {
-    compileFile(p)
-    compileFile(changeFileExt(p, '.json'))
-    compileFile(changeFileExt(p, '.wxml'))
-    compileFile(changeFileExt(p, '.wxss'))
+    compileFile(p, type)
+    compileFile(changeFileExt(p, '.json'), type)
+    compileFile(changeFileExt(p, '.wxml'), type)
+    compileFile(changeFileExt(p, '.wxss'), type)
   }
 }
 
@@ -220,18 +228,18 @@ function checkJsFilePath (p, source) {
     file += '.js'
   }
   if (fs.existsSync(file)) {
-    compileFile(file)
+    compileFile(file, undefined)
   } else {
     warringLog(`请优化该js的引入路径来节约编译时间: ${p}, 来源: ${path.relative(config.dir, source)}`, 'error')
   }
 }
 
-async function cssCompile (file) {
+async function cssCompile (file, type) {
   if (!fs.existsSync(file)) {
     return
   }
   const content = fs.readFileSync(file, 'utf8').toString()
-  const v = new CssVisitor(config.css, 'wx-', file)
+  const v = new CssVisitor(config.css, 'wx-', file, type)
   try {
     css.transform(content, v)
   } catch (error) {
@@ -304,9 +312,23 @@ function copyStaticFiles () {
   })
 }
 
+// 提示组件没有被页面使用
+function checkUsingComponents (components, file) {
+  for (const key in components) {
+    warringLog(`${path.relative(config.dir, changeFileExt(file, '.json'))} 中组件: ${key} 没有被使用`, 'error')
+  }
+}
+
+function lazyCodeLoading (lazyCodeLoading) {
+  if (!lazyCodeLoading) {
+    warringLog(`未开启未开启组件懒注入属性: lazyCodeLoading`, 'error')
+  }
+}
+
 class CssVisitor extends css.Visitor {
-  constructor(css, key, sourceFile) {
+  constructor(css, key, sourceFile, type) {
     super()
+    this.sub = type
     this.code = ''
     if (css && css.wxKey) {
       this.wxKey = css.wxKey
@@ -349,19 +371,30 @@ class CssVisitor extends css.Visitor {
     if (!file.endsWith('.wxss')) {
       warringLog(`请添加后缀名: ${text}, 来源: ${path.relative(config.dir, this.sourceFile)}`, 'error')
     } else {
-      compileFile(path.join(path.dirname(this.sourceFile), file))
+      compileFile(path.join(path.dirname(this.sourceFile), file), this.sub)
     }
     this.code += node.getText()
   }
 }
 
 class WxmlVisitor extends antlrv4_js_html.Visitor {
-  constructor(file) {
+  constructor(file, type) {
     super()
+    this.sub = type // 是否是主包
     this.sourceFile = file
+    this.usingComponents = fs.readJsonSync(changeFileExt(file, '.json')).usingComponents || {}
   }
 
   visitHtmlElement(ctx) {
+    const tag = ctx.TAG_NAME()[0].getText()
+    if (this.usingComponents[tag]) {
+      delete this.usingComponents[tag]
+    } else if (GLOBAL_FILE.globalUsingComponents[tag]) {
+      if (this.sub === 'subpackages') {
+        warringLog(`${path.relative(config.dir, this.sourceFile)} 中组件${tag}: 在主包中未使用,请移动到分包中`, 'error')
+      }
+      delete GLOBAL_FILE.globalUsingComponents[tag]
+    }
     ctx.htmlAttribute().forEach(attr => {
       const children = attr.children
       if (children.length > 1) {
