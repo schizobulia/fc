@@ -34,7 +34,7 @@ async function compileFile(file, type) {
   const ext = path.extname(file)
   if (ext === '.wxss') {
     await cssCompile(file, type)
-  } else if (ext === '.js') {
+  } else if (ext === '.js' || ext === '.wxs') {
     await jsCompile(file)
   } else if (ext === '.json') {
     await jsonCompile(file)
@@ -215,10 +215,10 @@ async function jsCompile (file) {
 }
 
 function checkModuleFileSzie (file) {
-  if ((fs.statSync(file).size / 1024).toFixed(0) > 100) {
-    return false
+  if ((fs.statSync(file).size / 1024).toFixed(0) > 200) {
+    return true
   }
-  return true
+  return false
 }
 
 // 检查js模块引入方式是否存在: 非相对路径的情况
@@ -298,7 +298,7 @@ function getFileByDir (src, arr) {
     } else {
       const ext = path.extname(d)
       const name = path.basename(d)
-      if (!['.js', '.json', '.wxml', '.wxss', '.md'].includes(ext) && 
+      if (!['.js', '.json', '.wxml', '.wxss', '.md', '.wxs'].includes(ext) && 
         !['.DS_Store', '.gitignore'].includes(name)) {
         arr.set(name, d)
       }
@@ -382,7 +382,11 @@ class WxmlVisitor extends antlrv4_js_html.Visitor {
     super()
     this.sub = type // 是否是主包
     this.sourceFile = file
-    this.usingComponents = fs.readJsonSync(changeFileExt(file, '.json')).usingComponents || {}
+    this.usingComponents = {}
+    const jsonFile = changeFileExt(file, '.json')
+    if (fs.existsSync(jsonFile)) {
+      this.usingComponents = fs.readJsonSync(jsonFile).usingComponents || {}
+    }
   }
 
   visitHtmlElement(ctx) {
@@ -403,22 +407,37 @@ class WxmlVisitor extends antlrv4_js_html.Visitor {
         if (!removeMark(val)) {
           warringLog(`请添加'${key}'的值, 来源: ${path.relative(config.dir, this.sourceFile)}`, 'warring')
         } else {
-          this.checkStaticPath(key, val)
+          this.checkStaticPath(key, val, tag)
         }
       }
     })
     return this.visitChildren(ctx)
   }
 
-  checkStaticPath(key, val) {
+  checkStaticPath(key, val, tag) {
     if (key === 'src') {
       const value = removeMark(val)
       const expression = /http(s)?:\/\/([\w-]+\.)+[\w-]+(\/[\w- .\/?%&=]*)?/
       const file = path.join(path.dirname(this.sourceFile), value)
+      this.wxsCheck(tag, file)
+      this.wxmlCheck(tag, file)
       if (!expression.test(value) && !value.includes('{') && !fs.existsSync(file)
         && !fs.existsSync(path.join(config.dir, value))) {
         warringLog(`${val}不存在, 来源: ${path.relative(config.dir, this.sourceFile)}`, 'error')
       }
+    }
+  }
+  //编译wxs路径的文件
+  wxsCheck (tag, file) {
+    if (tag !== 'wxs') {
+      return
+    }
+    compileFile(file, this.sub)
+  }
+  //编译wxml路径的文件
+  wxmlCheck (tag, file) {
+    if (tag === 'import' || tag === 'include') {
+      compileFile(file, this.sub)
     }
   }
 }
