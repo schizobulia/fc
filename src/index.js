@@ -1,4 +1,4 @@
-const css = require('antlrv4-js-css')
+const antlrv4_js_css = require('antlrv4-js-css')
 const fs = require('fs-extra')
 const path = require('path')
 const traverse = require('@babel/traverse').default
@@ -241,7 +241,7 @@ async function cssCompile (file, type) {
   const content = fs.readFileSync(file, 'utf8').toString()
   const v = new CssVisitor(config.css, 'wx-', file, type)
   try {
-    css.transform(content, v)
+    antlrv4_js_css.transform(content, v, null, new ErrorHandler())
   } catch (error) {
     warringLog(`${path.relative(config.dir, file)} 编译失败`, 'warring')
   }
@@ -325,7 +325,7 @@ function lazyCodeLoading (lazyCodeLoading) {
   }
 }
 
-class CssVisitor extends css.Visitor {
+class CssVisitor extends antlrv4_js_css.Visitor {
   constructor(css, key, sourceFile, type) {
     super()
     this.sub = type
@@ -374,6 +374,15 @@ class CssVisitor extends css.Visitor {
       compileFile(path.join(path.dirname(this.sourceFile), file), this.sub)
     }
     this.code += node.getText()
+  }
+}
+
+class ErrorHandler extends antlrv4_js_css.DefaultErrorStrategy {
+  reportError(recognizer, e) {
+  }
+  reportUnwantedToken(recognizer) {
+  }
+  reportMissingToken(recognizer) {
   }
 }
 
